@@ -5,77 +5,75 @@ import json
 import random
 import time
 
-# Cache para no quemar la IP
-cache_metal = {
-    "precio": None,
+# Cache global para no saturar y evitar bloqueos
+cache_lme = {
+    "datos": {},
     "timestamp": 0
 }
 
 class handler(BaseHTTPRequestHandler):
 
-    def intentar_scrape(self, url):
-        # Lista de configuraciones de navegador para rotar
-        configs = [
-            {'browser': 'chrome', 'platform': 'windows', 'desktop': True},
-            {'browser': 'firefox', 'platform': 'windows', 'desktop': True},
-            {'browser': 'chrome', 'platform': 'darwin', 'desktop': True}
-        ]
-        
-        # Headers variados: algunos sitios bloquean si ven siempre el mismo
-        headers_list = [
-            {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Referer': 'https://www.google.com/'
-            },
-            {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Sec-Fetch-Mode': 'navigate'
-            },
-            {
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
-                'Accept': '*/*',
-                'Connection': 'keep-alive'
-            }
+    def intentar_scrape(self, materiales):
+        # Lista de configuraciones para rotar identidad
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
         ]
 
         scraper = cloudscraper.create_scraper(
             delay=10,
-            browser=random.choice(configs)
+            browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
         )
         
-        # El wait que pediste antes de la petición
-        time.sleep(random.uniform(2.5, 3.5))
+        resultados = {}
         
-        res = scraper.get(url, headers=random.choice(headers_list), timeout=15)
+        for metal in materiales:
+            # Delay entre peticiones para que parezca humano
+            time.sleep(random.uniform(2.0, 3.0))
+            
+            headers = {
+                'User-Agent': random.choice(user_agents),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'es-ES,es;q=0.9',
+                'Referer': 'https://www.google.com/',
+                'Sec-Fetch-Mode': 'navigate'
+            }
+
+            try:
+                res = scraper.get(metal["url"], headers=headers, timeout=15)
+                if res.status_code == 200:
+                    soup = BeautifulSoup(res.text, 'html.parser')
+                    elemento = soup.find('span', class_='hero-metal-data__number')
+                    resultados[metal["id"]] = elemento.text.strip() if elemento else "No encontrado"
+                else:
+                    resultados[metal["id"]] = f"Error {res.status_code}"
+            except Exception as e:
+                resultados[metal["id"]] = f"Error: {str(e)}"
         
-        if res.status_code == 200:
-            soup = BeautifulSoup(res.text, 'html.parser')
-            elemento = soup.find('span', class_='hero-metal-data__number')
-            return elemento.text.strip() if elemento else "Tag no encontrado"
-        
-        return f"Error_{res.status_code}"
+        return resultados
 
     def do_GET(self):
-        global cache_metal
+        global cache_lme
         
-        # Solo probamos con Níquel para asegurar que no nos de timeout en Vercel
-        url_target = "https://www.lme.com/metals/non-ferrous/lme-nickel#Summary"
+        materiales_config = [
+            {"id": "niquel", "url": "https://www.lme.com/metals/non-ferrous/lme-nickel#Summary"},
+            {"id": "aluminio", "url": "https://www.lme.com/metals/non-ferrous/lme-aluminium#Overview"},
+            {"id": "estano", "url": "https://www.lme.com/metals/non-ferrous/lme-tin#Summary"}
+        ]
+        
         ahora = time.time()
+        TIEMPO_CACHE = 1800  # 30 minutos
         
-        # Si tenemos algo en caché de menos de 30 min, lo usamos
-        if cache_metal["precio"] and (ahora - cache_metal["timestamp"] < 1800):
-            valor = cache_metal["precio"]
-            status = "cache"
+        # Lógica de Cache
+        if cache_lme["datos"] and (ahora - cache_lme["timestamp"] < TIEMPO_CACHE):
+            final_data = cache_lme["datos"]
+            fuente = "cache"
         else:
-            valor = self.intentar_scrape(url_target)
-            if "Error" not in valor and valor != "Tag no encontrado":
-                cache_metal["precio"] = valor
-                cache_metal["timestamp"] = ahora
-                status = "success"
-            else:
-                status = "failed_or_blocked"
+            final_data = self.intentar_scrape(materiales_config)
+            cache_lme["datos"] = final_data
+            cache_lme["timestamp"] = ahora
+            fuente = "real-time"
 
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
@@ -83,9 +81,9 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         
         res_json = {
-            "mineral": "Niquel",
-            "precio": valor,
-            "status": status,
+            "lme_data": final_data,
+            "status": "online",
+            "fuente": fuente,
             "timestamp": int(ahora)
         }
         
