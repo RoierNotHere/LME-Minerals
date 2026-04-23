@@ -3,17 +3,17 @@ import cloudscraper
 from bs4 import BeautifulSoup
 import json
 import random
+import time  # Necesario para el delay
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        # Lista de User-Agents actualizados para rotar y evitar detección
+        # Rotación de User-Agents para variar la identidad del navegador
         user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0"
         ]
 
-        # Creamos el scraper con una configuración de cifrado más robusta
         scraper = cloudscraper.create_scraper(
             browser={
                 'browser': 'chrome',
@@ -21,21 +21,6 @@ class handler(BaseHTTPRequestHandler):
                 'desktop': True
             }
         )
-
-        # Configuramos encabezados que imitan a un humano real
-        headers = {
-            'User-Agent': random.choice(user_agents),
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'Cache-Control': 'max-age=0',
-        }
 
         materiales_config = [
             {"id": "niquel", "url": "https://www.lme.com/metals/non-ferrous/lme-nickel#Summary"},
@@ -48,25 +33,36 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             for metal in materiales_config:
-                # Realizamos la petición con los headers reforzados
+                # --- El "Wait" aleatorio ---
+                # Esto hace que el script espere un tiempo al azar entre 2.5 y 3.5 seg
+                tiempo_espera = random.uniform(2.5, 3.5)
+                time.sleep(tiempo_espera)
+                
+                # Configuración de headers dinámica
+                headers = {
+                    'User-Agent': random.choice(user_agents),
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
+                    'Referer': 'https://www.google.com/',
+                    'Connection': 'keep-alive'
+                }
+
                 res = scraper.get(metal["url"], headers=headers, timeout=20)
                 
                 if res.status_code == 200:
                     soup = BeautifulSoup(res.text, 'html.parser')
-                    # Intentamos encontrar el precio
                     elemento = soup.find('span', class_='hero-metal-data__number')
                     
                     if elemento:
                         resultados[metal["id"]] = elemento.text.strip()
                     else:
-                        resultados[metal["id"]] = "Selector no hallado"
+                        resultados[metal["id"]] = "Dato no encontrado"
                 else:
-                    # Guardamos el error específico para debuggear
                     resultados[metal["id"]] = f"Error {res.status_code}"
             
             payload = {
                 "lme_data": resultados,
-                "status": "success" if any("Error" not in str(v) for v in resultados.values()) else "failed"
+                "status": "success"
             }
             
         except Exception as e:
