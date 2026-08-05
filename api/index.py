@@ -14,11 +14,11 @@ cache_lme = {
 class handler(BaseHTTPRequestHandler):
 
     def intentar_scrape(self, materiales):
-        # Lista de configuraciones para rotar identidad
+        # User-Agents modernos y consistentes
         user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0'
         ]
 
         scraper = cloudscraper.create_scraper(
@@ -29,19 +29,33 @@ class handler(BaseHTTPRequestHandler):
         resultados = {}
         
         for metal in materiales:
-            # Delay entre peticiones para que parezca humano
-            time.sleep(random.uniform(2.0, 3.0))
+            # Pausa aleatoria más larga (entre 5 y 20 segundos) para simular navegación humana
+            tiempo_espera = random.uniform(5.0, 20.0)
+            time.sleep(tiempo_espera)
             
+            ua_actual = random.choice(user_agents)
+            
+            # Headers mejorados para imitar un navegador real completo
             headers = {
-                'User-Agent': random.choice(user_agents),
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'es-ES,es;q=0.9',
+                'User-Agent': ua_actual,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
                 'Referer': 'https://www.google.com/',
-                'Sec-Fetch-Mode': 'navigate'
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'cross-site',
+                'Sec-Fetch-User': '?1',
+                'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"'
             }
 
             try:
-                res = scraper.get(metal["url"], headers=headers, timeout=15)
+                res = scraper.get(metal["url"], headers=headers, timeout=20)
                 if res.status_code == 200:
                     soup = BeautifulSoup(res.text, 'html.parser')
                     elemento = soup.find('span', class_='hero-metal-data__number')
