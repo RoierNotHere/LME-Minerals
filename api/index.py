@@ -14,57 +14,57 @@ cache_lme = {
 class handler(BaseHTTPRequestHandler):
 
     def intentar_scrape(self, materiales):
-        # User-Agents modernos y consistentes
-        user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0'
-        ]
-
+        # Creamos la sesión para reutilizar cookies en todas las peticiones
         scraper = cloudscraper.create_scraper(
             delay=10,
             browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
         )
         
+        # Headers fijos y coherentes (evita inconsistencias entre User-Agent y Sec-Ch-Ua)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+            'Referer': 'https://www.lme.com/',
+            'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Upgrade-Insecure-Requests': '1'
+        }
+
+        # Warm-up: primera visita a la portada para generar cookies legítimas de Cloudflare
+        try:
+            scraper.get("https://www.lme.com/", headers=headers, timeout=15)
+            time.sleep(2)
+        except Exception:
+            pass
+
         resultados = {}
         
         for metal in materiales:
-            # Pausa aleatoria más larga (entre 5 y 20 segundos) para simular navegación humana
-            tiempo_espera = random.uniform(5.0, 20.0)
-            time.sleep(tiempo_espera)
+            # Pausa natural para simular navegación dentro del sitio
+            time.sleep(random.uniform(3.0, 7.0))
             
-            ua_actual = random.choice(user_agents)
-            
-            # Headers mejorados para imitar un navegador real completo
-            headers = {
-                'User-Agent': ua_actual,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Referer': 'https://www.google.com/',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'cross-site',
-                'Sec-Fetch-User': '?1',
-                'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-                'Sec-Ch-Ua-Mobile': '?0',
-                'Sec-Ch-Ua-Platform': '"Windows"'
-            }
-
             try:
-                res = scraper.get(metal["url"], headers=headers, timeout=20)
+                # Se eliminan los fragmentos (#Summary, #Overview) de la URL para la solicitud
+                url_limpia = metal["url"].split('#')[0]
+                
+                res = scraper.get(url_limpia, headers=headers, timeout=20)
                 if res.status_code == 200:
                     soup = BeautifulSoup(res.text, 'html.parser')
                     elemento = soup.find('span', class_='hero-metal-data__number')
                     resultados[metal["id"]] = elemento.text.strip() if elemento else "No encontrado"
+                    
+                    # Actualizamos el Referer dinámicamente con la última página visitada
+                    headers['Referer'] = url_limpia
                 else:
                     resultados[metal["id"]] = f"Error {res.status_code}"
             except Exception as e:
                 resultados[metal["id"]] = f"Error: {str(e)}"
-        
+                
         return resultados
 
     def do_GET(self):
